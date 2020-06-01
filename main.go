@@ -161,7 +161,7 @@ func fetchValue(size int, targetUrl, method, valueType, targetColumn, inputName,
 			if str == "_" {
 				str = "\\_"
 			} else if str == "%" {
-				str = "\\@"
+				str = "\\%"
 			}
 			if check(i, str) {
 				fmt.Print(string(char))
