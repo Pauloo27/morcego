@@ -183,9 +183,9 @@ func attack() {
 	valueType := askFor("Value type", "STRING", "INT")
 	targetColumn := askFor("Target column")
 	if method == "POST" {
-		inputName = askFor("Vunerable input name")
+		inputName = askFor("Vulnerable input name")
 	} else {
-		inputName = askFor("Vunerable input name (leave empty to PATH values)")
+		inputName = askFor("Vulnerable input name (leave empty to PATH values)")
 	}
 	if method == "POST" || inputName != "" {
 		extraInputs = askFor("Extra inputs (pass=1234&something=321)")
