@@ -30,6 +30,7 @@ Developers assume no liability and are not responsible for any misuse or damage 
 Clone the repository, install a GoLang compiler and run `go build`.
 
 ## Usage
+![Screenshot](./screenshot.png)
 ### Form
 Run `morcego`, then reply with:
 
