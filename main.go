@@ -145,14 +145,16 @@ func fetchSize(targetUrl, method, valueType, targetColumn, inputName, extraInput
 }
 
 func fetchValue(size int, targetUrl, method, valueType, targetColumn, inputName, extraInputs, extraConditions, errorMessage string) {
-	check := func(index int, char string) bool {
-		pattern := strings.Repeat("_", index)
+	check := func(alreadyFound string, index int, char string) bool {
+		pattern := alreadyFound
+		pattern += strings.Repeat("_", index-len(alreadyFound))
 		pattern += char
 		pattern += strings.Repeat("_", size-index-1)
 		body := doRequest(pattern, targetUrl, method, valueType, targetColumn, inputName, extraInputs, extraConditions)
 		return !strings.Contains(body, errorMessage)
 	}
 
+	alreadyFound := ""
 	fmt.Printf("   %s=> ", colorGreen)
 	for i := 0; i < size; i++ {
 		found := false
@@ -163,13 +165,15 @@ func fetchValue(size int, targetUrl, method, valueType, targetColumn, inputName,
 			} else if str == "%" {
 				str = "\\%"
 			}
-			if check(i, str) {
+			if check(alreadyFound, i, str) {
+				alreadyFound += str
 				fmt.Print(string(char))
 				found = true
 				break
 			}
 		}
 		if !found {
+			alreadyFound += "_"
 			fmt.Printf("%s?%s", colorRed, colorGreen)
 		}
 	}
