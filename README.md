@@ -3,7 +3,6 @@
 **Blind SQLI Tool**
 
 ```go
-
        _,    _   _    ,_
   .o888P     Y8o8Y     Y888o.
  d88888      88888      88888b
@@ -14,8 +13,7 @@ YJGS8P"Y888P"Y888P"Y888P"Y8888P
  Y888   '8'   Y8P   '8'   888Y
   '8o          V          o8'
     '                     '
-
-```				                            
+```
 
 ## What is it
 Morcego is a Blind SQL Injection tool to brute force size and values.
@@ -28,6 +26,10 @@ Developers assume no liability and are not responsible for any misuse or damage 
 
 ## Build
 Clone the repository, install a GoLang compiler and run `go build`.
+
+## Example Server
+You can find a NodeJS server inside [./example-server](./example-server) that 
+was used to test this tool.
 
 ## Usage
 ![Screenshot](./screenshot.png)
