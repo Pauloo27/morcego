@@ -28,8 +28,8 @@ Developers assume no liability and are not responsible for any misuse or damage 
 Clone the repository, install a GoLang compiler and run `go build`.
 
 ## Example Server
-You can find a NodeJS server inside [./example-server](./example-server) that 
-was used to test this tool.
+You can find the NodeJS server that was used to test this tool inside 
+[./example-server](./example-server).
 
 ## Usage
 ![Screenshot](./screenshot.png)
